@@ -39,7 +39,6 @@ namespace WebCrawler
                 BtnStart.IsEnabled = true;
                 Log($"File selected: {_selectedFilePath}");
             }
-            // await WebCrawler.Demos.ComparisonDemo.RunComparison();
         }
 
         private async void BtnStart_Click(object sender, RoutedEventArgs e)
@@ -57,7 +56,7 @@ namespace WebCrawler
 
             try
             {
-                Log("Starting crawling process with CefSharp...");
+                Log("Starting crawling process...");
                 
                 // Read input file
                 Log("Reading input file...");
@@ -90,7 +89,7 @@ namespace WebCrawler
                         // Take only first 10 items
                         var top10Headings = googleHeadings.Take(10).ToList();
                         row[$"Google_Headings"] = string.Join(Environment.NewLine, top10Headings);
-                        Log($"  Found {googleHeadings.Count} Google headings (using top 10)");
+                        Log($"  Found {googleHeadings.Count} Google headings");
                       
                     }
 
