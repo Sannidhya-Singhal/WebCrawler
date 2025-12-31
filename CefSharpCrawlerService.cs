@@ -186,6 +186,7 @@ namespace WebCrawler.Services
                         .Where(t => !string.IsNullOrWhiteSpace(t))
                         .Where(t => t.Length > 15 && t.Length < 300)
                         .Distinct()
+                        .Skip(2)
                         .Take(10)
                         .ToList();
                         
