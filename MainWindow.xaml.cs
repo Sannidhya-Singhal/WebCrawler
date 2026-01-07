@@ -87,7 +87,7 @@ namespace WebCrawler
                         //}
                        
                         // Take only first 10 items
-                        var top10Headings = googleHeadings.Take(10).ToList();
+                        var top10Headings = googleHeadings.Skip(1).Take(10).ToList();
                         row[$"Google_Headings"] = string.Join(Environment.NewLine, top10Headings);
                         Log($"  Found {googleHeadings.Count} Google headings");
                       
