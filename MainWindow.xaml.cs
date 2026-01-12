@@ -1,6 +1,8 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
 using WebCrawler.Services;
 
@@ -50,21 +52,36 @@ namespace WebCrawler
                 return;
             }
 
+            // Validate input counts from TextBoxes
+            if (!int.TryParse(TxtGoogleCount.Text, out int googleCount) || googleCount < 1 || googleCount > 50)
+            {
+                MessageBox.Show("Please enter a valid number for Google Headings Count (1-50).", "Invalid Input", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!int.TryParse(TxtAmazonCount.Text, out int amazonCount) || amazonCount < 1 || amazonCount > 50)
+            {
+                MessageBox.Show("Please enter a valid number for Amazon Search Results Count (1-50).", "Invalid Input", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             BtnStart.IsEnabled = false;
             BtnSelectFile.IsEnabled = false;
+            TxtGoogleCount.IsEnabled = false;
+            TxtAmazonCount.IsEnabled = false;
             ProgressBar.Value = 0;
 
             try
             {
-                Log("Starting crawling process...");
+                Log($"Starting crawling process...");
+                Log($"Settings: Google Headings={googleCount}, Amazon Results={amazonCount}");
                 
                 // Read input file
                 Log("Reading input file...");
                 var inputData = await _fileService.ReadInputFile(_selectedFilePath);
                 Log($"Loaded {inputData.Count} records");
-
-                // DON'T create new instance here - reuse existing one
-                // _crawlerService is already initialized in constructor
                 
                 // Process each row
                 for (int i = 0; i < inputData.Count; i++)
@@ -76,34 +93,22 @@ namespace WebCrawler
                     var amazonSearchUrl = row.ContainsKey("search_page_url") ? row["search_page_url"]?.ToString() : null;
                     var productUrl = row.ContainsKey("detail_page_url") ? row["detail_page_url"]?.ToString() : null;
 
-                    // Crawl Google headings
+                    // Crawl Google headings with custom count
                     if (!string.IsNullOrWhiteSpace(googleUrl))
                     {
-                        Log("  Crawling Google headings...");
-                        var googleHeadings = await _crawlerService.CrawlGoogleHeadings(googleUrl);
-                        //for (int j = 0; j < 10; j++)
-                        //{
-                        //    row[$"Google_Heading_{j + 1}"] = j < googleHeadings.Count ? googleHeadings[j] : "";
-                        //}
-                       
-                        // Take only first 10 items
-                        var top10Headings = googleHeadings.Skip(1).Take(10).ToList();
-                        row[$"Google_Headings"] = string.Join(Environment.NewLine, top10Headings);
-                        Log($"  Found {googleHeadings.Count} Google headings");
-                      
+                        Log($"  Crawling Google headings (taking {googleCount} results)...");
+                        var googleHeadings = await _crawlerService.CrawlGoogleHeadings(googleUrl,googleCount);
+                        var selectedHeadings = googleHeadings.Skip(2).Take(googleCount).ToList();
+                        row[$"Google_Headings"] = string.Join(Environment.NewLine, selectedHeadings);
+                        //Log($"  Found {googleHeadings.Count} Google headings, selected {selectedHeadings.Count}");
                     }
 
-                    // Crawl Amazon search titles
+                    // Crawl Amazon search titles with custom count
                     if (!string.IsNullOrWhiteSpace(amazonSearchUrl))
                     {
-                        Log("  Crawling Amazon search titles...");
-                        var searchTitles = await _crawlerService.CrawlAmazonSearchTitles(amazonSearchUrl);
-                        //for (int j = 0; j < 10; j++)
-                        //{
-                        //    row[$"Amazon_Search_Title_{j + 1}"] = j < searchTitles.Count ? searchTitles[j] : "";
-                        //}
-                        row[$"Amazon Search Titles"] = string.Join(Environment.NewLine, searchTitles.Take(10));
-
+                        Log($"  Crawling Amazon search titles (taking {amazonCount} results)...");
+                        var searchTitles = await _crawlerService.CrawlAmazonSearchTitles(amazonSearchUrl, amazonCount);
+                        row[$"Amazon Search Titles"] = string.Join(Environment.NewLine, searchTitles);
                         Log($"  Found {searchTitles.Count} Amazon titles");
                     }
 
@@ -123,6 +128,7 @@ namespace WebCrawler
                         {
                             row["Product Overview"] = "";
                         }
+                        
                         // Store each item on a new line in the same cell
                         if (aboutItem != null && aboutItem.Any())
                         {
@@ -160,9 +166,10 @@ namespace WebCrawler
             }
             finally
             {
-                // Don't dispose here - keep reusing the same instance
                 BtnStart.IsEnabled = true;
                 BtnSelectFile.IsEnabled = true;
+                TxtGoogleCount.IsEnabled = true;
+                TxtAmazonCount.IsEnabled = true;
             }
         }
 

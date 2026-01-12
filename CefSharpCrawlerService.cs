@@ -103,7 +103,7 @@ namespace WebCrawler.Services
         /// <summary>
         /// Crawl Google search results
         /// </summary>
-        public async Task<List<string>> CrawlGoogleHeadings(string url)
+        public async Task<List<string>> CrawlGoogleHeadings(string url, int resultCount = 10)
         {
             var headings = new List<string>();
 
@@ -131,9 +131,9 @@ namespace WebCrawler.Services
                 // Multiple extraction strategies
                 var strategies = new Func<List<string>>[]
                 {
-                    () => ExtractShoppingProducts(doc),
-                    () => ExtractGenericH3(doc),
-                    () => ExtractDivHeadings(doc)
+                    () => ExtractShoppingProducts(doc,resultCount),
+                    () => ExtractGenericH3(doc,resultCount),
+                    () => ExtractDivHeadings(doc,resultCount)
                 };
 
                 foreach (var strategy in strategies)
@@ -159,7 +159,7 @@ namespace WebCrawler.Services
         /// <summary>
         /// Crawl Amazon search results - ULTRA SIMPLIFIED
         /// </summary>
-        public async Task<List<string>> CrawlAmazonSearchTitles(string url)
+        public async Task<List<string>> CrawlAmazonSearchTitles(string url, int resultCount = 10)
         {
             var titles = new List<string>();
 
@@ -187,7 +187,7 @@ namespace WebCrawler.Services
                         .Where(t => t.Length > 15 && t.Length < 300)
                         .Distinct()
                         .Skip(2)
-                        .Take(10)
+                        .Take(resultCount)
                         .ToList();
                         
                     Console.WriteLine($"  ? Found {titles.Count} potential product titles");
@@ -216,7 +216,7 @@ namespace WebCrawler.Services
                         .Where(t => !t.StartsWith("("))
                         .GroupBy(t => t)
                         .Select(g => g.Key)
-                        .Take(10)
+                        .Take(resultCount)
                         .ToList();
                         
                     Console.WriteLine($"  ? Found {titles.Count} potential titles from spans");
@@ -460,22 +460,58 @@ namespace WebCrawler.Services
                     }
                 }
 
-                // Strategy 2: If feature-bullets not found, try generic li extraction
+                // Strategy 2: Try detailBullets_feature_div (NEW FALLBACK)
                 if (aboutItems.Count == 0)
                 {
-                    Console.WriteLine("  ? Trying generic list item extraction...");
+                    Console.WriteLine("  ? Trying detailBullets_feature_div extraction...");
                     
-                    var allListItems = doc.DocumentNode.Descendants("li")
-                        .Select(li => li.InnerText.Trim())
-                        .Where(text => !string.IsNullOrWhiteSpace(text))
-                        .Where(text => text.Length > 20 && text.Length < 500)
-                        .Where(text => !text.Contains("$"))
-                        .Where(text => !text.StartsWith("("))
-                        .Distinct()
-                        .Take(10)
-                        .ToList();
+                    var detailBulletsDiv = doc.DocumentNode.SelectSingleNode("//div[@id='detailBullets_feature_div']");
+                    
+                    if (detailBulletsDiv != null)
+                    {
+                        // Extract list items from the unordered list
+                        var listItems = detailBulletsDiv.Descendants("li")
+                            .ToList();
 
-                    aboutItems.AddRange(allListItems);
+                        foreach (var li in listItems)
+                        {
+                            // Get the span with class="a-list-item"
+                            var listItemSpan = li.Descendants("span")
+                                .FirstOrDefault(s => s.GetAttributeValue("class", "").Contains("a-list-item"));
+                            
+                            if (listItemSpan != null)
+                            {
+                                var text = listItemSpan.InnerText.Trim();
+                                
+                                // Clean up the text
+                                text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ");
+                                
+                                if (!string.IsNullOrWhiteSpace(text) && text.Length > 10)
+                                {
+                                    aboutItems.Add(text);
+                                    Console.WriteLine($"    • Detail Bullet {aboutItems.Count}: {text.Substring(0, Math.Min(60, text.Length))}...");
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Strategy 3: If still not found, try generic li extraction
+                if (aboutItems.Count == 0)
+                {
+                    //Console.WriteLine("  ? Trying generic list item extraction...");
+                    
+                    //var allListItems = doc.DocumentNode.Descendants("li")
+                    //    .Select(li => li.InnerText.Trim())
+                    //    .Where(text => !string.IsNullOrWhiteSpace(text))
+                    //    .Where(text => text.Length > 20 && text.Length < 500)
+                    //    .Where(text => !text.Contains("$"))
+                    //    .Where(text => !text.StartsWith("("))
+                    //    .Distinct()
+                    //    .Take(10)
+                    //    .ToList();
+
+                    //aboutItems.AddRange(allListItems);
                 }
 
                 Console.WriteLine($"  ? Found {aboutItems.Count} product features");
@@ -483,7 +519,7 @@ namespace WebCrawler.Services
                 if (overview.Count == 0 && aboutItems.Count == 0)
                 {
                     Console.WriteLine("  ?? No product details found - saving debug HTML");
-                    SaveDebugHtml(html, $"amazon_product_debug_{DateTime.Now:yyyyMMddHHmmss}.html");
+                    //SaveDebugHtml(html, $"amazon_product_debug_{DateTime.Now:yyyyMMddHHmmss}.html");
                 }
 
                 return (overview, aboutItems);
@@ -516,33 +552,33 @@ namespace WebCrawler.Services
         }
 
         // Extraction methods
-        private List<string> ExtractShoppingProducts(HtmlDocument doc)
+        private List<string> ExtractShoppingProducts(HtmlDocument doc, int resultCount = 10)
         {
             return doc.DocumentNode
                 .SelectNodes("//div[@data-docid]//h3 | //div[@data-content-id]//h3 | //h3[@class='tAxDx']")
                 ?.Select(n => n.InnerText.Trim())
                 .Where(t => !string.IsNullOrWhiteSpace(t))
                 .Distinct()
-                .Take(10)
+                .Take(resultCount)
                 .ToList() ?? new List<string>();
         }
 
-        private List<string> ExtractGenericH3(HtmlDocument doc)
+        private List<string> ExtractGenericH3(HtmlDocument doc, int resultCount = 10)
         {
             return doc.DocumentNode
                 .SelectNodes("//h3")
                 ?.Select(n => n.InnerText.Trim())
                 .Where(t => !string.IsNullOrWhiteSpace(t) && t.Length > 10 && t.Length < 200)
                 .Distinct()
-                .Take(10)
+                .Take(resultCount)
                 .ToList() ?? new List<string>();
         }
 
-        private List<string> ExtractDivHeadings(HtmlDocument doc)
+        private List<string> ExtractDivHeadings(HtmlDocument doc, int resultCount = 10)
         {
             return doc.DocumentNode
                     .SelectNodes("//div[contains(@class, 'pla-unit')]//span[contains(@class, 'title')]")
-                    ?.Take(10)
+                    ?.Take(resultCount)
                     .Select(n => n.InnerText.Trim())
                     .ToList() ?? new List<string>();
         }
