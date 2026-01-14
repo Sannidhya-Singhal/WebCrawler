@@ -565,13 +565,44 @@ namespace WebCrawler.Services
 
         private List<string> ExtractGenericH3(HtmlDocument doc, int resultCount = 10)
         {
-            return doc.DocumentNode
-                .SelectNodes("//h3")
-                ?.Select(n => n.InnerText.Trim())
-                .Where(t => !string.IsNullOrWhiteSpace(t) && t.Length > 10 && t.Length < 200)
+            // Try all heading tags (h1, h2, h3, h4)
+            var allHeadings = doc.DocumentNode.SelectNodes("//h3");
+            
+            if (allHeadings == null)
+            {
+                Console.WriteLine("  ?? No heading nodes found in document");
+                return new List<string>();
+            }
+            
+            Console.WriteLine($"  ?? Total heading nodes found: {allHeadings.Count}");
+            
+            // Group by tag name to see distribution
+            var headingsByTag = allHeadings.GroupBy(n => n.Name);
+            foreach (var group in headingsByTag)
+            {
+                Console.WriteLine($"  ??   - <{group.Key}> count: {group.Count()}");
+            }
+            
+            var nodesWithText = allHeadings
+                .Select(n => n.InnerText.Trim())
+                .Where(t => !string.IsNullOrWhiteSpace(t))
                 .Distinct()
-                .Take(resultCount)
-                .ToList() ?? new List<string>();
+                .ToList();
+            
+            Console.WriteLine($"  ?? Heading nodes with non-empty text: {nodesWithText.Count}");
+            
+            var filteredNodes = nodesWithText
+                .Where(t => t.Length > 10 && t.Length < 200)
+                .Distinct()
+                .ToList();
+            
+            Console.WriteLine($"  ?? After filtering (length 10-200, distinct): {filteredNodes.Count}");
+            
+            var result = nodesWithText.Take(resultCount).ToList();
+            
+            Console.WriteLine($"  ?? Final result count (after Take({resultCount})): {result.Count}");
+            
+            return result;
         }
 
         private List<string> ExtractDivHeadings(HtmlDocument doc, int resultCount = 10)
